@@ -193,20 +193,24 @@ float get_pattern(vec2 pos, float distance_to_border, float current_state, float
         }
         
         // === CALCOLO DIMENSIONE DOTS ===
-        float distance_factor = clamp(distance_to_border / gradient_width, 0.0, 1.0);
+        // Use border distance directly as factor, with more responsive scaling
+        float distance_factor;
+        if (gradient_width > 0.0) {
+            distance_factor = clamp(distance_to_border / gradient_width, 0.0, 1.0);
+        } else {
+            distance_factor = 0.0;
+        }
         
         float dot_size;
         if (current_gets_dots) {
-            // La regione corrente dovrebbe avere dots grandi qui
-            // Make the variation much more extreme for testing
-            dot_size = 0.01 + 0.48 * distance_factor;  // Da piccolissimi (0.01) a grandi (0.49)
+            // Current region gets larger dots as we move away from border
+            dot_size = mix(0.05, 0.45, distance_factor);
         } else {
-            // La regione corrente dovrebbe avere dots piccoli (valleys grandi)
-            // Make the variation much more extreme for testing
-            dot_size = 0.49 - 0.48 * distance_factor;  // Da grandi (0.49) a piccolissimi (0.01)
+            // Neighbor region gets smaller dots as we move away from border  
+            dot_size = mix(0.45, 0.05, distance_factor);
         }
         
-        dot_size = clamp(dot_size, 0.01, 0.49);
+        dot_size = clamp(dot_size, 0.05, 0.45);
         
         // === RENDERING FINALE ===
         bool show_dot = step(length(center), dot_size) > 0.5;
@@ -322,10 +326,9 @@ void fragment() {
                     
                     float dot_size;
                     if (current_gets_dots) {
-                        // Match the extreme values from get_pattern function
-                        dot_size = 0.01 + 0.48 * distance_factor;
+                        dot_size = mix(0.05, 0.45, distance_factor);
                     } else {
-                        dot_size = 0.49 - 0.48 * distance_factor;
+                        dot_size = mix(0.45, 0.05, distance_factor);
                     }
                     
                     // Visualize dot_size as color intensity (0.0=black, 0.5=gray, 1.0=white)
@@ -346,6 +349,49 @@ void fragment() {
                     float current_state = get_tile_state(floor(tile_pos));
                     float pattern = get_pattern(tile_pos, border_distance, current_state, neighbor_state);
                     COLOR = vec4(vec3(pattern), 1.0); // Black and white pattern
+                } else {
+                    COLOR = vec4(0.0, 1.0, 1.0, 1.0); // Ciano = nessun vicino diverso
+                }
+            } else {
+                COLOR = vec4(0.5, 0.5, 0.5, 1.0); // Grigio = fuori gradiente
+            }
+        } else if (debug_view == 7) {
+            // Debug: Visualizza distance_factor values
+            float border_distance = calculate_precise_border_distance(tile_pos);
+            if (border_distance < gradient_width && gradient_width > 0.0) {
+                float neighbor_state = find_nearest_neighbor_state(tile_pos);
+                if (neighbor_state >= 0.0) {
+                    float distance_factor_normal = clamp(border_distance / gradient_width, 0.0, 1.0);
+                    float distance_factor_enhanced = clamp(border_distance / (gradient_width * 0.25), 0.0, 1.0);
+                    
+                    // Show normal factor in red channel, enhanced in green channel
+                    COLOR = vec4(distance_factor_normal, distance_factor_enhanced, 0.0, 1.0);
+                } else {
+                    COLOR = vec4(0.0, 1.0, 1.0, 1.0); // Ciano = nessun vicino diverso
+                }
+            } else {
+                COLOR = vec4(0.5, 0.5, 0.5, 1.0); // Grigio = fuori gradiente
+            }
+        } else if (debug_view == 8) {
+            // Debug: Fixed extreme pattern test (to verify rendering pipeline)
+            float border_distance = calculate_precise_border_distance(tile_pos);
+            if (border_distance < gradient_width && gradient_width > 0.0) {
+                float neighbor_state = find_nearest_neighbor_state(tile_pos);
+                if (neighbor_state >= 0.0) {
+                    float current_state = get_tile_state(floor(tile_pos));
+                    
+                    // Use a simple position-based pattern for testing
+                    vec2 grid_fract = fract(tile_pos * dither_scale);
+                    vec2 center = abs(grid_fract - 0.5);
+                    float center_dist = length(center);
+                    
+                    // Fixed extreme dot sizes for testing
+                    float fixed_dot_size = (border_distance < gradient_width * 0.5) ? 0.05 : 0.45;
+                    
+                    bool show_dot = center_dist < fixed_dot_size;
+                    float pattern = show_dot ? 1.0 : 0.0;
+                    
+                    COLOR = vec4(vec3(pattern), 1.0);
                 } else {
                     COLOR = vec4(0.0, 1.0, 1.0, 1.0); // Ciano = nessun vicino diverso
                 }
