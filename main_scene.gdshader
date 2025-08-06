@@ -1,5 +1,7 @@
 shader_type canvas_item;
 
+const float PI = 3.14159265359;
+
 // --- Uniforms esistenti ---
 uniform mat4 world_to_local_transform;
 uniform vec2 grid_origin_offset;
@@ -213,7 +215,12 @@ float get_pattern(vec2 pos, float distance_to_border, float current_state, float
         dot_size = clamp(dot_size, 0.05, 0.45);
         
         // === RENDERING FINALE ===
-        bool show_dot = step(length(center), dot_size) > 0.5;
+        // Test different distance calculations
+        float center_dist_euclidean = length(center);
+        float center_dist_manhattan = max(center.x, center.y);  // Square pattern
+        
+        // Use square pattern for more predictable results
+        bool show_dot = center_dist_manhattan <= dot_size;
         
         if (current_gets_dots) {
             return show_dot ? 1.0 : 0.0;  // Dots = corrente, valleys = vicino
@@ -383,15 +390,46 @@ void fragment() {
                     // Use a simple position-based pattern for testing
                     vec2 grid_fract = fract(tile_pos * dither_scale);
                     vec2 center = abs(grid_fract - 0.5);
-                    float center_dist = length(center);
+                    float center_dist = max(center.x, center.y);  // Square pattern
                     
                     // Fixed extreme dot sizes for testing
                     float fixed_dot_size = (border_distance < gradient_width * 0.5) ? 0.05 : 0.45;
                     
-                    bool show_dot = center_dist < fixed_dot_size;
+                    bool show_dot = center_dist <= fixed_dot_size;
                     float pattern = show_dot ? 1.0 : 0.0;
                     
                     COLOR = vec4(vec3(pattern), 1.0);
+                } else {
+                    COLOR = vec4(0.0, 1.0, 1.0, 1.0); // Ciano = nessun vicino diverso
+                }
+            } else {
+                COLOR = vec4(0.5, 0.5, 0.5, 1.0); // Grigio = fuori gradiente
+            }
+        } else if (debug_view == 9) {
+            // Debug: Compare center_dist vs dot_size values
+            float border_distance = calculate_precise_border_distance(tile_pos);
+            if (border_distance < gradient_width && gradient_width > 0.0) {
+                float neighbor_state = find_nearest_neighbor_state(tile_pos);
+                if (neighbor_state >= 0.0) {
+                    float current_state = get_tile_state(floor(tile_pos));
+                    
+                    // Calculate the same values as in get_pattern
+                    vec2 grid_pos = floor(tile_pos * dither_scale);
+                    vec2 grid_fract = fract(tile_pos * dither_scale);
+                    vec2 center = abs(grid_fract - 0.5);
+                    
+                    float checker = mod(grid_pos.x + grid_pos.y, 2.0);
+                    float target_dots_state = checker < 0.5 ? 0.0 : 1.0;
+                    bool current_gets_dots = abs(current_state - target_dots_state) < 0.1;
+                    
+                    float distance_factor = clamp(border_distance / gradient_width, 0.0, 1.0);
+                    float dot_size = current_gets_dots ? mix(0.05, 0.45, distance_factor) : mix(0.45, 0.05, distance_factor);
+                    
+                    float center_dist = max(center.x, center.y);  // Manhattan distance
+                    
+                    // Show center_dist in red, dot_size in green, comparison result in blue
+                    float comparison = center_dist <= dot_size ? 1.0 : 0.0;
+                    COLOR = vec4(center_dist * 2.0, dot_size * 2.0, comparison, 1.0);
                 } else {
                     COLOR = vec4(0.0, 1.0, 1.0, 1.0); // Ciano = nessun vicino diverso
                 }
